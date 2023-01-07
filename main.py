@@ -117,10 +117,10 @@ def get_product_list_in_search_from_130point(search_content: str, min_price: int
             'Cookie': 'session=56254937;'
         },
         data = urlencode(search_params, quote_via=quote).replace('%20', '%2B'),
-        proxies={
-            'http': 'socks5://127.0.0.1:7890',
-            'https': 'socks5://127.0.0.1:7890',
-        },
+        # proxies={
+        #     'http': 'socks5://127.0.0.1:7890',
+        #     'https': 'socks5://127.0.0.1:7890',
+        # },
     )
     if resp.status_code != 200:
         raise Exception('Get product list from 130point failed: {}, please retry.'.format(resp.status_code))
