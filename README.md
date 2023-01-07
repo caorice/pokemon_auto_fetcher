@@ -32,3 +32,19 @@ python3 main.py example.xlsx
 python3 main.py example.xlsx --min 200 --max 20000
 
 ```
+
+## Update Latest Price Data From Ebay
+
+```bash
+
+python3 main.py example.xlsx -p ebay
+
+```
+
+## Update Latest Price Data From 130point
+
+```bash
+
+python3 main.py example.xlsx -p 130point
+
+```
