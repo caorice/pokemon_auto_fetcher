@@ -21,7 +21,7 @@ python3 main.py template.xlsx -d
 
 ```bash
 
-python3 main.py target.xlsx
+python3 main.py example.xlsx
 
 ```
 
@@ -29,6 +29,6 @@ python3 main.py target.xlsx
 
 ```bash
 
-python3 main.py target.xlsx --min 200 --max 20000
+python3 main.py example.xlsx --min 200 --max 20000
 
 ```
