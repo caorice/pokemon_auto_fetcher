@@ -1,0 +1,5 @@
+beautifulsoup4==4.11.1
+openpyxl==3.0.7
+pydash==5.1.2
+regex==2021.4.4
+requests==2.25.1
