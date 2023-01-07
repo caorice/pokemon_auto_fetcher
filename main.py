@@ -1,8 +1,20 @@
-import requests, argparse, openpyxl, regex as re
-from urllib.parse import urlencode, quote_plus
+import requests, argparse, openpyxl, regex as re, json
+from urllib.parse import urlencode, quote_plus, quote
 from bs4 import BeautifulSoup
 from typing import Dict, List, Tuple, Any
 from pydash import omit_by, is_none, filter_
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
+
+retry_strategy = Retry(
+    total=3,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["HEAD", "GET", "OPTIONS"]
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+http = requests.Session()
+http.mount("https://", adapter)
+http.mount("http://", adapter)
 
 TITLE_KEY_MAP = {
     'input card name': 'search_content',
@@ -12,6 +24,11 @@ TITLE_KEY_MAP = {
     'average': 'average',
     'source': 'source',
 }
+
+USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+
+PLATFORM_EBAY = 'ebay'
+PLATFORM_130POINT = '130point'
 
 def omit_none(value: Dict) -> Dict:
     return omit_by(value, is_none)
@@ -58,17 +75,19 @@ def set_dict_list_to_excel(file_path: str, dict_list: List[Dict[str, str]], titl
                 ws.cell(row=row_index + 2, column= index + 1).value = data_item.get(key)
     wb.save(file_path)
 
-def get_product_list_from_search_by_text(search_content: str, min_price: int = None, max_price: int = None) -> Tuple[str, List[Dict[str, str]]]:
+def get_product_list_in_search_from_ebay(search_content: str, min_price: int = None, max_price: int = None) -> Tuple[str, List[Dict[str, str]]]:
     search_params = omit_none({
         '_nkw': search_content,
         '_udlo': min_price,
         '_udhi': max_price,
+        'LH_Sold': 1,
+        'LH_Complete': 1,
     })
     target_url = 'https://www.ebay.com/sch/i.html?{}'.format(
         urlencode(search_params, quote_via=quote_plus)
     )
     resp = requests.get(target_url, headers={
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+        'User-Agent': USER_AGENT,
     })
     result = []
     soup = BeautifulSoup(resp.text, 'html.parser')
@@ -84,8 +103,52 @@ def get_product_list_from_search_by_text(search_content: str, min_price: int = N
                 })
     return target_url, result
 
-def get_output_data_item(search_content: str, min_price: int = None, max_price: int = None, level: str = None) -> Dict[str, str]:
-    url, result = get_product_list_from_search_by_text(search_content, min_price, max_price)
+def get_product_list_in_search_from_130point(search_content: str, min_price: int = None, max_price: int = None) -> Tuple[str, List[Dict[str, str]]]:
+    search_params = {
+        'query': search_content,
+        'type': 2,
+        'subcat': -1,
+    }
+    resp = requests.post(
+        "https://130point.com/wp_pages/sales/getDataParse.php",
+        headers={
+            "User-Agent": USER_AGENT,
+            "Content-Type": "application/x-www-form-urlencoded",
+            'Cookie': 'session=56254937;'
+        },
+        data = urlencode(search_params, quote_via=quote).replace('%20', '%2B'),
+        proxies={
+            'http': 'socks5://127.0.0.1:7890',
+            'https': 'socks5://127.0.0.1:7890',
+        },
+    )
+    if resp.status_code != 200:
+        raise Exception('Get product list from 130point failed: {}, please retry.'.format(resp.status_code))
+    try:
+        body_str = resp.json().get('body')
+    except Exception as e:
+        return 'https://130point.com/sales/', []
+    body_data = json.loads(body_str)
+    result = []
+    for item in body_data:
+        price = get_price_in_string(item.get('price'))
+        if price and (max_price is None or price <= max_price) and (min_price is None or price >= min_price):
+            result.append({
+                'price': price,
+                'title': item.get('title'),
+            })
+    return 'https://130point.com/sales/', result
+
+def get_product_list_in_search(search_content: str, platform: str, min_price: int = None, max_price: int = None) -> Tuple[str, List[Dict[str, str]]]:
+    if platform == PLATFORM_EBAY:
+        return get_product_list_in_search_from_ebay(search_content, min_price, max_price)
+    elif platform == PLATFORM_130POINT:
+        return get_product_list_in_search_from_130point(search_content, min_price, max_price)
+    else:
+        raise Exception('Platform not supported: {}'.format(platform))
+
+def get_output_data_item(search_content: str, platform: str, min_price: int = None, max_price: int = None, level: str = None) -> Dict[str, str]:
+    url, result = get_product_list_in_search(search_content, platform, min_price = max_price, max_price = max_price)
     result = filter_(result, lambda item: is_in_after_strip(level, item['title'])) if level else result
     if not result:
         return {
@@ -115,11 +178,12 @@ input_data_list:
     }
 ]
 '''
-def get_output_data_list(input_data_list: List[Dict[str, str]], min_price: int = None, max_price: int = None) -> List[Dict[str, str]]:
+def get_output_data_list(input_data_list: List[Dict[str, str]], platform: str, min_price: int = None, max_price: int = None) -> List[Dict[str, str]]:
     result = []
-    for input_data in input_data_list:
+    for index, input_data in enumerate(input_data_list):
+        print('Processing {} / {}...'.format(index + 1, len(input_data_list)))
         if input_data.get('search_content'):
-            result.append(get_output_data_item(input_data.get('search_content'), min_price, max_price, input_data.get('level')))
+            result.append(get_output_data_item(input_data.get('search_content'), platform, min_price, max_price, input_data.get('level')))
     return result
 
 def get_index_key_map(ws: Any, title_key_map: Dict[str, str]):
@@ -140,8 +204,10 @@ def main():
     parser.add_argument('--min', help='The min price to search', required=False, type=float)
     parser.add_argument('--max', help='The max price to search', required=False, type=float)
     parser.add_argument('--dump', '-d', help='Dump template file to edit', required=False, default=False, const=True, nargs='?')
+    parser.add_argument('--platform', '-p', help='The platform to search', required=False, default='ebay', choices=[PLATFORM_EBAY, PLATFORM_130POINT], type=str)
     args_data = parser.parse_args()
     target_file: str = args_data.file
+    platform: str = args_data.platform
     if args_data.dump:
         output_file = target_file if re.search(r'.+\.xlsx?$', target_file, re.IGNORECASE) else '{}.xlsx'.format(target_file)
         set_dict_list_to_excel(output_file, [], TITLE_KEY_MAP, is_edit=False)
@@ -152,9 +218,9 @@ def main():
             print('No any data to process.')
             return
         print('Read {} items from {}'.format(len(dict_list), target_file))
-        print('Download data from ebay...')
-        output_dict_list = get_output_data_list(dict_list, min_price = args_data.min, max_price = args_data.max)
-        print('Download data from ebay done.')
+        print('Download data from {}...'.format(platform))
+        output_dict_list = get_output_data_list(dict_list, platform, min_price = args_data.min, max_price = args_data.max)
+        print('Download data from {} done.'.format(platform))
         set_dict_list_to_excel(target_file, output_dict_list, TITLE_KEY_MAP)
         print('Write {} items to {}'.format(len(output_dict_list), target_file))
         print('Done.')
