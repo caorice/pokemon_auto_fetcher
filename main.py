@@ -72,7 +72,7 @@ def get_product_list_from_search_by_text(search_content: str, min_price: int = N
     })
     result = []
     soup = BeautifulSoup(resp.text, 'html.parser')
-    for item in soup.select('.srp-results.srp-list.clearfix .s-item__wrapper.clearfix'):
+    for item in soup.select('li[data-viewport^="{\\"trackableId"] .s-item__wrapper .s-item__info'):
         price_tag = item.select_one('.s-item__price')
         title_tag = item.select_one('.s-item__title')
         if price_tag and title_tag:
