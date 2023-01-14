@@ -1,7 +1,7 @@
-import requests, argparse, openpyxl, regex as re, json
+import requests, argparse, openpyxl, regex as re, json, os
 from urllib.parse import urlencode, quote_plus, quote
 from bs4 import BeautifulSoup
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Union
 from pydash import omit_by, is_none, filter_
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
@@ -11,6 +11,7 @@ retry_strategy = Retry(
     status_forcelist=[429, 500, 502, 503, 504],
     allowed_methods=["HEAD", "GET", "OPTIONS"]
 )
+
 adapter = HTTPAdapter(max_retries=retry_strategy)
 http = requests.Session()
 http.mount("https://", adapter)
@@ -29,6 +30,14 @@ USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
 
 PLATFORM_EBAY = 'ebay'
 PLATFORM_130POINT = '130point'
+PLATFORM_130POINT_ALL = '130point-all'
+
+def get_proxy() -> Union[Dict, None]:
+    if os.getenv('PROXY'):
+        return {
+            'http': os.getenv('PROXY'),
+            'https': os.getenv('PROXY'),
+        }
 
 def omit_none(value: Dict) -> Dict:
     return omit_by(value, is_none)
@@ -86,9 +95,13 @@ def get_product_list_in_search_from_ebay(search_content: str, min_price: int = N
     target_url = 'https://www.ebay.com/sch/i.html?{}'.format(
         urlencode(search_params, quote_via=quote_plus)
     )
-    resp = requests.get(target_url, headers={
-        'User-Agent': USER_AGENT,
-    })
+    resp = requests.get(
+        target_url,
+        headers={
+            'User-Agent': USER_AGENT,
+        },
+        proxies=get_proxy()
+    )
     result = []
     soup = BeautifulSoup(resp.text, 'html.parser')
     for item in soup.select('li[data-viewport^="{\\"trackableId"] .s-item__wrapper .s-item__info'):
@@ -117,10 +130,7 @@ def get_product_list_in_search_from_130point(search_content: str, min_price: int
             'Cookie': 'session=56254937;'
         },
         data = urlencode(search_params, quote_via=quote).replace('%20', '%2B'),
-        # proxies={
-        #     'http': 'socks5://127.0.0.1:7890',
-        #     'https': 'socks5://127.0.0.1:7890',
-        # },
+        proxies=get_proxy()
     )
     if resp.status_code != 200:
         raise Exception('Get product list from 130point failed: {}, please retry.'.format(resp.status_code))
@@ -137,13 +147,52 @@ def get_product_list_in_search_from_130point(search_content: str, min_price: int
                 'price': price,
                 'title': item.get('title'),
             })
+    print(result)
     return 'https://130point.com/sales/', result
+
+def get_product_list_in_search_from_130point_all(search_content: str, min_price: int = None, max_price: int = None) -> Tuple[str, List[Dict[str, str]]]:
+    search_params = {
+        'query': search_content,
+        'sort': 'EndTimeSoonest',
+        'tab_id': 3,
+        'tz': 'Asia/Shanghai',
+        'width': 965,
+        'height': 763,
+        'mp': 'all',
+    }
+    resp = requests.post(
+        "https://130point.com/wp_pages/sales/getCards.php",
+        headers={
+            "User-Agent": USER_AGENT,
+            "Content-Type": "application/x-www-form-urlencoded",
+            'Cookie': 'session=56254937;',
+            'x-requested-with': 'XMLHttpRequest',
+            'referer': 'https://130point.com/cards/'
+        },
+        data = urlencode(search_params, quote_via=quote_plus),
+        proxies=get_proxy()
+    )
+    if resp.status_code != 200:
+        raise Exception('Get product list from 130point all tab failed: {}, please retry.'.format(resp.status_code))
+    soup = BeautifulSoup(resp.text, 'html.parser')
+    result = []
+    for row in soup.select('tr#dRow'):
+        price_str = row.attrs.get('data-price')
+        title_element = row.select_one('span#titleText a')
+        price = price_str and float(price_str)
+        result.append({
+            'price': price,
+            'title': title_element and title_element.text,
+        })
+    return 'https://130point.com/cards/', result
 
 def get_product_list_in_search(search_content: str, platform: str, min_price: int = None, max_price: int = None) -> Tuple[str, List[Dict[str, str]]]:
     if platform == PLATFORM_EBAY:
         return get_product_list_in_search_from_ebay(search_content, min_price, max_price)
     elif platform == PLATFORM_130POINT:
         return get_product_list_in_search_from_130point(search_content, min_price, max_price)
+    elif platform == PLATFORM_130POINT_ALL:
+        return get_product_list_in_search_from_130point_all(search_content, min_price, max_price)
     else:
         raise Exception('Platform not supported: {}'.format(platform))
 
@@ -204,7 +253,7 @@ def main():
     parser.add_argument('--min', help='The min price to search', required=False, type=float)
     parser.add_argument('--max', help='The max price to search', required=False, type=float)
     parser.add_argument('--dump', '-d', help='Dump template file to edit', required=False, default=False, const=True, nargs='?')
-    parser.add_argument('--platform', '-p', help='The platform to search', required=False, default='ebay', choices=[PLATFORM_EBAY, PLATFORM_130POINT], type=str)
+    parser.add_argument('--platform', '-p', help='The platform to search', required=False, default='ebay', choices=[PLATFORM_EBAY, PLATFORM_130POINT, PLATFORM_130POINT_ALL], type=str)
     args_data = parser.parse_args()
     target_file: str = args_data.file
     platform: str = args_data.platform
