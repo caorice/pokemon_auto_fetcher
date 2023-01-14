@@ -41,10 +41,26 @@ python3 main.py example.xlsx -p ebay
 
 ```
 
-## Update Latest Price Data From 130point
+## Update Latest Price Data From 130point "Search Ebay Sales" Tab
 
 ```bash
 
 python3 main.py example.xlsx -p 130point
+
+```
+
+## Update Latest Price Data From 130point "All Marketplace Sales" Tab
+
+```bash
+
+python3 main.py example.xlsx -p 130point-all
+
+```
+
+## Use "socks5://127.0.0.1:7890" As An Example Of Proxy To Fetch Data
+
+```bash
+
+PROXY=socks5://127.0.0.1:7890 python3 main.py example.xlsx
 
 ```

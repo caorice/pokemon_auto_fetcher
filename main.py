@@ -253,7 +253,7 @@ def main():
     parser.add_argument('--min', help='The min price to search', required=False, type=float)
     parser.add_argument('--max', help='The max price to search', required=False, type=float)
     parser.add_argument('--dump', '-d', help='Dump template file to edit', required=False, default=False, const=True, nargs='?')
-    parser.add_argument('--platform', '-p', help='The platform to search', required=False, default='ebay', choices=[PLATFORM_EBAY, PLATFORM_130POINT, PLATFORM_130POINT_ALL], type=str)
+    parser.add_argument('--platform', '-p', help='The platform to search', required=False, default=PLATFORM_EBAY, choices=[PLATFORM_EBAY, PLATFORM_130POINT, PLATFORM_130POINT_ALL], type=str)
     args_data = parser.parse_args()
     target_file: str = args_data.file
     platform: str = args_data.platform
