@@ -23,8 +23,8 @@ TITLE_KEY_MAP = {
     'highest': 'highest',
     'lowest': 'lowest',
     'average': 'average',
+    'number of result': 'count',
     'source': 'source',
-    'number of result': 'count'
 }
 
 USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
@@ -263,7 +263,7 @@ def main():
     if args_data.dump:
         output_file = target_file if re.search(r'.+\.xlsx?$', target_file, re.IGNORECASE) else '{}.xlsx'.format(target_file)
         set_dict_list_to_excel(output_file, [], TITLE_KEY_MAP, is_edit=False)
-        print('Out put template file to {}'.format(output_file))
+        print('Output template file to {}'.format(output_file))
     else:
         dict_list = get_dict_list_from_excel(target_file, TITLE_KEY_MAP)
         if not dict_list:
