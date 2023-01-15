@@ -24,6 +24,7 @@ TITLE_KEY_MAP = {
     'lowest': 'lowest',
     'average': 'average',
     'source': 'source',
+    'number of result': 'count'
 }
 
 USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
@@ -80,7 +81,7 @@ def set_dict_list_to_excel(file_path: str, dict_list: List[Dict[str, str]], titl
         if title:
             ws.cell(row=1, column=index + 1).value = title
         for row_index, data_item in enumerate(dict_list):
-            if data_item.get(key):
+            if data_item.get(key) is not None:
                 ws.cell(row=row_index + 2, column= index + 1).value = data_item.get(key)
     wb.save(file_path)
 
@@ -207,6 +208,7 @@ def get_output_data_item(search_content: str, platform: str, min_price: int = No
             'lowest': None,
             'average': None,
             'source': url,
+            'count': 0
         }
     else:
         return {
@@ -216,6 +218,7 @@ def get_output_data_item(search_content: str, platform: str, min_price: int = No
             'lowest': min([x['price'] for x in result]),
             'average': sum([x['price'] for x in result]) / len(result),
             'source': url,
+            'count': len(result)
         }
 
 '''
